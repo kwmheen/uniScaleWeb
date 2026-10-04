@@ -199,7 +199,7 @@ function drawScene(width, height, left, right, gaze) {
     ctx2d.fillStyle = "#171a22";
     ctx2d.fillRect(0, 0, width, height);
     ctx2d.fillStyle = "#f4f1ea";
-    ctx2d.font = "bold 28px Palatino Linotype, Georgia, serif";
+    ctx2d.font = "bold 28px Palatino Linotype, Palatino, Georgia, serif";
     ctx2d.fillText("Camera off", 48, height / 2);
   }
   const scaleSelected = controller.active.selected;
@@ -214,7 +214,7 @@ function drawScene(width, height, left, right, gaze) {
     ctx2d.strokeStyle = aimed || active ? THEME : "#161616";
     ctx2d.strokeRect(x, y, w, h);
     ctx2d.fillStyle = "#161616";
-    ctx2d.font = "24px Palatino Linotype, Georgia, serif";
+    ctx2d.font = "24px Palatino Linotype, Palatino, Apple SD Gothic Neo, serif";
     ctx2d.fillText(`${card.name}  ${card.scale.toFixed(2)}`, x + 14, y + 34);
   }
 
@@ -457,16 +457,40 @@ function loop() {
   requestAnimationFrame(loop);
 }
 
+async function openCameraStream() {
+  const attempts = [
+    { audio: false, video: { facingMode: { ideal: "user" }, width: { ideal: 1280 }, height: { ideal: 720 } } },
+    { audio: false, video: { width: { ideal: 1280 }, height: { ideal: 720 } } },
+    { audio: false, video: true },
+  ];
+  let lastError = null;
+  for (const constraints of attempts) {
+    try {
+      return await navigator.mediaDevices.getUserMedia(constraints);
+    } catch (error) {
+      lastError = error;
+      if (error?.name === "NotAllowedError" || error?.name === "PermissionDeniedError") throw error;
+    }
+  }
+  throw lastError ?? new Error("camera");
+}
+
 async function startCamera() {
   if (running) return;
   startButton.disabled = true;
   try {
     await ensureModels();
+  } catch (error) {
+    console.error(error);
+    startButton.disabled = false;
+    startButton.textContent = "Start camera";
+    verdictBox.textContent = "Model failed";
+    verdictBox.className = "verdict bad";
+    return;
+  }
+  try {
     startButton.textContent = "Connecting";
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: false,
-      video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
-    });
+    const stream = await openCameraStream();
     video.srcObject = stream;
     await video.play();
     cameraOn = true;

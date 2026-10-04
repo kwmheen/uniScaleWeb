@@ -4,7 +4,7 @@
   --muted: #5e584f;
   --accent: #2a52be;
   --serif: "Palatino Linotype", Palatino, Georgia, serif;
-  --sans: "Segoe UI", "Malgun Gothic", sans-serif;
+  --sans: "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
 }
 
 * { box-sizing: border-box; }

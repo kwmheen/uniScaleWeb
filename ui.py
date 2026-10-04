@@ -18,13 +18,21 @@ HAND_CONNECTIONS = (
 )
 
 _FONT: ImageFont.ImageFont | None = None
+_FONT_PATHS = (
+    r"C:\Windows\Fonts\malgun.ttf",
+    r"C:\Windows\Fonts\gulim.ttc",
+    "/System/Library/Fonts/AppleSDGothicNeo.ttc",
+    "/System/Library/Fonts/Supplemental/AppleGothic.ttf",
+    "/Library/Fonts/Arial Unicode.ttf",
+    "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+)
 
 
 def _font(size: int) -> ImageFont.ImageFont:
     global _FONT
     if _FONT is not None and getattr(_FONT, "size", size) == size:
         return _FONT
-    for path in (r"C:\Windows\Fonts\malgun.ttf", r"C:\Windows\Fonts\gulim.ttc"):
+    for path in _FONT_PATHS:
         try:
             _FONT = ImageFont.truetype(path, size)
             return _FONT

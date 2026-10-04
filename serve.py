@@ -2,7 +2,31 @@
 
 import threading
 import time
+import urllib.request
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+MODELS = {
+    "hand_landmarker.task": (
+        "https://storage.googleapis.com/mediapipe-models/hand_landmarker/"
+        "hand_landmarker/float16/1/hand_landmarker.task"
+    ),
+    "face_landmarker.task": (
+        "https://storage.googleapis.com/mediapipe-models/face_landmarker/"
+        "face_landmarker/float16/1/face_landmarker.task"
+    ),
+}
+
+
+def ensure_models() -> None:
+    folder = Path(__file__).resolve().parent / "models"
+    folder.mkdir(parents=True, exist_ok=True)
+    for name, url in MODELS.items():
+        path = folder / name
+        if path.exists() and path.stat().st_size > 0:
+            continue
+        print(f"모델 받는 중: {name}", flush=True)
+        urllib.request.urlretrieve(url, path)
 
 PING_TIMEOUT = 6
 
@@ -69,6 +93,7 @@ class AppServer(ThreadingHTTPServer):
 
 
 if __name__ == "__main__":
+    ensure_models()
     server = AppServer(("127.0.0.1", 8765), Handler)
     print("http://127.0.0.1:8765/web/index.html", flush=True)
     print("페이지의 종료를 누르거나 브라우저 창을 닫으면 이 서버도 꺼집니다.", flush=True)

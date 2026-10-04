@@ -1,4 +1,4 @@
-"""Windows 웹캠에서 MediaPipe로 uniScale 인터랙션을 실행합니다.
+"""웹캠에서 MediaPipe로 uniScale 인터랙션을 실행합니다.
 
 실행:
     python3.11 main.py
@@ -31,15 +31,46 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def open_camera(index: int, width: int, height: int) -> cv2.VideoCapture:
-    capture = cv2.VideoCapture(index, cv2.CAP_DSHOW)
+def _camera_api() -> int:
+    if sys.platform == "darwin":
+        return int(getattr(cv2, "CAP_AVFOUNDATION", cv2.CAP_ANY))
+    if sys.platform == "win32":
+        return int(getattr(cv2, "CAP_DSHOW", cv2.CAP_ANY))
+    return int(cv2.CAP_ANY)
+
+
+def _capture(index: int, width: int, height: int) -> cv2.VideoCapture:
+    capture = cv2.VideoCapture(index, _camera_api())
     if not capture.isOpened():
         capture.release()
         capture = cv2.VideoCapture(index)
-    capture.set(cv2.CAP_PROP_FRAME_WIDTH, width)
-    capture.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
-    capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+    if capture.isOpened() and width > 0 and height > 0:
+        capture.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+        capture.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+    if capture.isOpened() and sys.platform != "darwin":
+        capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
     return capture
+
+
+def _preview_frame(capture: cv2.VideoCapture, attempts: int = 20):
+    for _ in range(attempts):
+        ok, frame = capture.read()
+        if ok and frame is not None:
+            return frame
+        time.sleep(0.05)
+    return None
+
+
+def open_camera(index: int, width: int, height: int) -> cv2.VideoCapture:
+    capture = _capture(index, width, height)
+    if sys.platform != "darwin" or not capture.isOpened():
+        return capture
+    # AVFoundation은 지원하지 않는 해상도면 프레임을 주지 않는다.
+    if _preview_frame(capture) is not None:
+        return capture
+    capture.release()
+    time.sleep(0.3)
+    return _capture(index, 0, 0)
 
 
 def main() -> None:
@@ -64,13 +95,24 @@ def main() -> None:
     cv2.namedWindow(window, cv2.WINDOW_NORMAL)
     previous = time.perf_counter()
     fps = 0.0
+    waiting_for_camera = True
+    missed = 0
 
     try:
         while True:
             ok, frame = capture.read()
             if not ok or frame is None:
-                print("카메라 프레임을 읽지 못했습니다.")
-                break
+                if not waiting_for_camera or missed > 60:
+                    if sys.platform == "darwin":
+                        print("카메라 프레임을 읽지 못했습니다. 시스템 설정 > 개인 정보 보호 및 보안 > 카메라에서 터미널 권한을 확인해 주세요.")
+                    else:
+                        print("카메라 프레임을 읽지 못했습니다.")
+                    break
+                missed += 1
+                if cv2.waitKey(1) & 0xFF in (27, ord("q"), ord("Q")):
+                    break
+                continue
+            waiting_for_camera = False
             if mirror:
                 frame = cv2.flip(frame, 1)
 
