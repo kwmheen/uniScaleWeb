@@ -1,5 +1,4 @@
 import {
-  FaceLandmarker,
   FilesetResolver,
   HandLandmarker,
 } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/+esm";
@@ -12,7 +11,6 @@ import {
 
 const WASM = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/wasm";
 const HAND_MODEL = new URL("../models/hand_landmarker.task", import.meta.url).href;
-const FACE_MODEL = new URL("../models/face_landmarker.task", import.meta.url).href;
 
 const WRIST = 0;
 const THUMB_TIP = 4;
@@ -28,9 +26,55 @@ const CONNECTIONS = [
   [0, 17],
 ];
 const THEME = "#2a52be";
-const NOSE = 1;
-const LEFT_CHEEK = 234;
-const RIGHT_CHEEK = 454;
+const DISTRICTS = [
+  { x: 0.22, y: 0.32, name: "Harbor" },
+  { x: 0.48, y: 0.42, name: "Square" },
+  { x: 0.74, y: 0.28, name: "Hill" },
+  { x: 0.32, y: 0.7, name: "Park" },
+  { x: 0.68, y: 0.74, name: "Station" },
+];
+const NEARBY = [
+  { x: 0.15, y: 0.22, name: "Lighthouse" },
+  { x: 0.28, y: 0.38, name: "Pier" },
+  { x: 0.2, y: 0.42, name: "Warehouse" },
+  { x: 0.43, y: 0.35, name: "Fountain" },
+  { x: 0.78, y: 0.2, name: "Tower" },
+  { x: 0.27, y: 0.64, name: "Pond" },
+  { x: 0.74, y: 0.66, name: "Clock" },
+];
+const DETAILS = [
+  { x: 0.11, y: 0.16, name: "Buoy", color: "#c8392c" },
+  { x: 0.185, y: 0.2, name: "Bell" },
+  { x: 0.46, y: 0.37, name: "Coin" },
+  { x: 0.3, y: 0.66, name: "Bench" },
+  { x: 0.8, y: 0.24, name: "Flag" },
+];
+const WINGS = [
+  { x: 0.24, y: 0.28, name: "South" },
+  { x: 0.5, y: 0.24, name: "East" },
+  { x: 0.3, y: 0.62, name: "West" },
+  { x: 0.52, y: 0.78, name: "Core" },
+  { x: 0.82, y: 0.72, name: "North" },
+];
+const PARTS = [
+  { x: 0.74, y: 0.58, name: "Bracket" },
+  { x: 0.2, y: 0.22, name: "Slot" },
+  { x: 0.46, y: 0.18, name: "Rail" },
+  { x: 0.26, y: 0.54, name: "Boss" },
+  { x: 0.48, y: 0.7, name: "Plate" },
+];
+const HOLES = [
+  { x: 0.7, y: 0.54, name: "6 mm", color: "#c8392c" },
+  { x: 0.78, y: 0.62, name: "4 mm" },
+  { x: 0.18, y: 0.2, name: "8 mm" },
+  { x: 0.44, y: 0.16, name: "3 mm" },
+  { x: 0.5, y: 0.74, name: "10 mm" },
+];
+const GOALS = {
+  map: "Near the Harbor there is a Lighthouse. Find the red buoy.",
+  cad: "On the North wing there is a Bracket. Find the 6 mm hole.",
+};
+const APPS = ["base", "map", "cad"];
 
 const video = document.querySelector("#video");
 const canvas = document.querySelector("#canvas");
@@ -49,12 +93,11 @@ const smooth = {
 };
 
 let handLandmarker = null;
-let faceLandmarker = null;
 let running = false;
 let lastTime = 0;
 let lastStamp = 0;
 let fps = 0;
-let aimMode = "hand";
+let appMode = "base";
 let loopError = "";
 let cameraOn = false;
 let lastReport = null;
@@ -132,59 +175,152 @@ function readHands(result, width, height) {
   return [found.Left ?? null, found.Right ?? null];
 }
 
-function displayPoint(landmark, width, height) {
-  return [(1 - landmark.x) * width, landmark.y * height];
+function project(card, mx, my, x, y, w, h) {
+  return [
+    x + w / 2 + (mx - card.mapX) * w * card.mapZoom,
+    y + h / 2 + (my - card.mapY) * h * card.mapZoom,
+  ];
 }
 
-function segmentHitsRect(start, end, rect) {
-  const [x, y, w, h] = rect;
-  if (start[0] >= x && start[0] <= x + w && start[1] >= y && start[1] <= y + h) return start;
-  const dx = end[0] - start[0];
-  const dy = end[1] - start[1];
-  let near = 0;
-  let far = 1;
-  const p = [-dx, dx, -dy, dy];
-  const q = [start[0] - x, x + w - start[0], start[1] - y, y + h - start[1]];
-  for (let i = 0; i < 4; i += 1) {
-    if (Math.abs(p[i]) < 1e-8) {
-      if (q[i] < 0) return null;
-    } else {
-      const t = q[i] / p[i];
-      if (p[i] < 0) near = Math.max(near, t);
-      else far = Math.min(far, t);
-      if (near > far) return null;
-    }
-  }
-  return [start[0] + dx * near, start[1] + dy * near];
+function inFrame(px, py, x, y, w, h) {
+  return px >= x + 10 && px <= x + w - 10 && py >= y + 28 && py <= y + h - 10;
 }
 
-function readFaceRay(result, width, height, target) {
-  const face = result.faceLandmarks?.[0];
-  if (!face || face.length <= RIGHT_CHEEK) {
-    return { tracked: false, x: width / 2, y: height / 2, origin: null, dir: null, hit: false, points: face?.length ?? 0 };
+function drawMarks(card, places, x, y, w, h, radius, fontSize) {
+  ctx2d.font = `${fontSize}px Palatino, Georgia, serif`;
+  ctx2d.textBaseline = "middle";
+  for (const place of places) {
+    const [px, py] = project(card, place.x, place.y, x, y, w, h);
+    if (!inFrame(px, py, x, y, w, h)) continue;
+    ctx2d.fillStyle = place.color || THEME;
+    ctx2d.beginPath();
+    ctx2d.arc(px, py, radius, 0, Math.PI * 2);
+    ctx2d.fill();
+    ctx2d.fillStyle = "#161616";
+    ctx2d.fillText(place.name, px + radius + 5, py);
   }
-  const nose = displayPoint(face[NOSE], width, height);
-  const left = displayPoint(face[LEFT_CHEEK], width, height);
-  const right = displayPoint(face[RIGHT_CHEEK], width, height);
-  const mid = [(left[0] + right[0]) / 2, (left[1] + right[1]) / 2];
-  const center = target ? [target.nx * width, target.ny * height] : [width / 2, height / 2];
-  const gain = 16;
-  const dx = center[0] - nose[0] + (nose[0] - mid[0]) * gain;
-  const dy = center[1] - nose[1] + (nose[1] - mid[1]) * gain;
-  const mag = Math.hypot(dx, dy) || 1;
-  const dir = [dx / mag, dy / mag];
-  const reach = Math.hypot(width, height);
-  const end = [nose[0] + dir[0] * reach, nose[1] + dir[1] * reach];
-  const hitPoint = target ? segmentHitsRect(nose, end, target.rect(width, height)) : null;
-  return {
-    tracked: Boolean(hitPoint),
-    x: hitPoint ? hitPoint[0] : end[0],
-    y: hitPoint ? hitPoint[1] : end[1],
-    origin: nose,
-    dir,
-    hit: Boolean(hitPoint),
-    points: face.length,
-  };
+}
+
+function drawMap(card, x, y, w, h) {
+  const zoom = card.mapZoom;
+  ctx2d.save();
+  ctx2d.beginPath();
+  ctx2d.rect(x, y, w, h);
+  ctx2d.clip();
+  ctx2d.translate(x + w / 2, y + h / 2);
+  ctx2d.scale(zoom, zoom);
+  ctx2d.translate(-card.mapX * w, -card.mapY * h);
+
+  ctx2d.fillStyle = "#d7e6f2";
+  ctx2d.fillRect(0, 0, w, h);
+  ctx2d.fillStyle = "#efe4cf";
+  ctx2d.beginPath();
+  ctx2d.moveTo(w * 0.06, h * 0.22);
+  ctx2d.lineTo(w * 0.28, h * 0.08);
+  ctx2d.lineTo(w * 0.7, h * 0.1);
+  ctx2d.lineTo(w * 0.94, h * 0.26);
+  ctx2d.lineTo(w * 0.9, h * 0.78);
+  ctx2d.lineTo(w * 0.58, h * 0.94);
+  ctx2d.lineTo(w * 0.16, h * 0.86);
+  ctx2d.closePath();
+  ctx2d.fill();
+
+  ctx2d.fillStyle = "#b7c99a";
+  ctx2d.fillRect(w * 0.2, h * 0.58, w * 0.2, h * 0.16);
+  ctx2d.fillRect(w * 0.62, h * 0.22, w * 0.16, h * 0.12);
+
+  const stroke = (px) => px / zoom;
+  ctx2d.strokeStyle = "#7eb0d4";
+  ctx2d.lineWidth = stroke(Math.max(6, w * 0.028));
+  ctx2d.beginPath();
+  ctx2d.moveTo(w * 0.08, h * 0.48);
+  ctx2d.quadraticCurveTo(w * 0.4, h * 0.36, w * 0.58, h * 0.52);
+  ctx2d.quadraticCurveTo(w * 0.74, h * 0.66, w * 0.96, h * 0.58);
+  ctx2d.stroke();
+
+  ctx2d.strokeStyle = "#f7f3ea";
+  ctx2d.lineWidth = stroke(Math.max(2, w * 0.012));
+  ctx2d.beginPath();
+  for (const t of [0.28, 0.46, 0.64, 0.82]) {
+    ctx2d.moveTo(w * 0.1, h * t);
+    ctx2d.lineTo(w * 0.9, h * t);
+    ctx2d.moveTo(w * t, h * 0.14);
+    ctx2d.lineTo(w * t, h * 0.88);
+  }
+  ctx2d.stroke();
+  ctx2d.restore();
+
+  ctx2d.save();
+  ctx2d.beginPath();
+  ctx2d.rect(x, y, w, h);
+  ctx2d.clip();
+  drawMarks(card, DISTRICTS, x, y, w, h, 5, 18);
+  if (zoom >= 3) drawMarks(card, NEARBY, x, y, w, h, 4, 15);
+  if (zoom >= 7) drawMarks(card, DETAILS, x, y, w, h, 4, 14);
+  ctx2d.restore();
+
+  drawZoomLabel(card, x, y, zoom >= 7 ? "Detail" : zoom >= 3 ? "Nearby" : "Overview");
+}
+
+function drawCad(card, x, y, w, h) {
+  const zoom = card.mapZoom;
+  const stroke = (px) => px / zoom;
+  const blocks = [
+    [0.08, 0.12, 0.36, 0.3],
+    [0.52, 0.1, 0.4, 0.26],
+    [0.1, 0.5, 0.32, 0.36],
+    [0.48, 0.46, 0.44, 0.42],
+  ];
+  ctx2d.save();
+  ctx2d.beginPath();
+  ctx2d.rect(x, y, w, h);
+  ctx2d.clip();
+  ctx2d.translate(x + w / 2, y + h / 2);
+  ctx2d.scale(zoom, zoom);
+  ctx2d.translate(-card.mapX * w, -card.mapY * h);
+
+  ctx2d.fillStyle = "#e4edf5";
+  ctx2d.fillRect(0, 0, w, h);
+  ctx2d.strokeStyle = "#c5d4e6";
+  ctx2d.lineWidth = stroke(1);
+  ctx2d.beginPath();
+  for (const t of [0.2, 0.4, 0.6, 0.8]) {
+    ctx2d.moveTo(w * t, h * 0.06);
+    ctx2d.lineTo(w * t, h * 0.94);
+    ctx2d.moveTo(w * 0.06, h * t);
+    ctx2d.lineTo(w * 0.94, h * t);
+  }
+  ctx2d.stroke();
+  ctx2d.strokeStyle = "#16325c";
+  ctx2d.lineWidth = stroke(Math.max(1.5, w * 0.004));
+  for (const [bx, by, bw, bh] of blocks) {
+    ctx2d.strokeRect(w * bx, h * by, w * bw, h * bh);
+  }
+  ctx2d.strokeRect(w * 0.66, h * 0.5, w * 0.22, h * 0.16);
+  ctx2d.lineWidth = stroke(1.5);
+  for (const hole of HOLES) {
+    ctx2d.beginPath();
+    ctx2d.arc(w * hole.x, h * hole.y, Math.max(3, w * 0.012), 0, Math.PI * 2);
+    ctx2d.stroke();
+  }
+  ctx2d.restore();
+
+  ctx2d.save();
+  ctx2d.beginPath();
+  ctx2d.rect(x, y, w, h);
+  ctx2d.clip();
+  drawMarks(card, WINGS, x, y, w, h, 5, 18);
+  if (zoom >= 3) drawMarks(card, PARTS, x, y, w, h, 4, 15);
+  if (zoom >= 7) drawMarks(card, HOLES, x, y, w, h, 4, 14);
+  ctx2d.restore();
+  drawZoomLabel(card, x, y, zoom >= 7 ? "Callouts" : zoom >= 3 ? "Parts" : "Plan");
+}
+
+function drawZoomLabel(card, x, y, layer) {
+  ctx2d.fillStyle = "#161616";
+  ctx2d.font = "24px Palatino Linotype, Palatino, Georgia, serif";
+  ctx2d.textBaseline = "alphabetic";
+  ctx2d.fillText(`${card.mapZoom.toFixed(1)}×  ${layer}`, x + 14, y + 32);
 }
 
 function drawScene(width, height, left, right, gaze) {
@@ -207,15 +343,20 @@ function drawScene(width, height, left, right, gaze) {
   for (const card of cards) {
     const [x, y, w, h] = card.rect(width, height);
     const active = card === scaleSelected || card === moveSelected;
-    const aimed = aimMode === "ray" ? Boolean(gaze.hit) : active;
-    ctx2d.fillStyle = "rgba(243, 239, 230, 0.82)";
-    ctx2d.fillRect(x, y, w, h);
+    if (appMode === "map") {
+      drawMap(card, x, y, w, h);
+    } else if (appMode === "cad") {
+      drawCad(card, x, y, w, h);
+    } else {
+      ctx2d.fillStyle = "rgba(243, 239, 230, 0.82)";
+      ctx2d.fillRect(x, y, w, h);
+      ctx2d.fillStyle = "#161616";
+      ctx2d.font = "24px Palatino Linotype, Palatino, Apple SD Gothic Neo, serif";
+      ctx2d.fillText(`${card.name}  ${card.scale.toFixed(2)}`, x + 14, y + 34);
+    }
     ctx2d.lineWidth = active ? 3 : 1.5;
-    ctx2d.strokeStyle = aimed || active ? THEME : "#161616";
+    ctx2d.strokeStyle = active ? THEME : "#161616";
     ctx2d.strokeRect(x, y, w, h);
-    ctx2d.fillStyle = "#161616";
-    ctx2d.font = "24px Palatino Linotype, Palatino, Apple SD Gothic Neo, serif";
-    ctx2d.fillText(`${card.name}  ${card.scale.toFixed(2)}`, x + 14, y + 34);
   }
 
   for (const hand of [left, right]) {
@@ -228,19 +369,6 @@ function drawScene(width, height, left, right, gaze) {
       ctx2d.lineTo(hand.pixel[end][0], hand.pixel[end][1]);
     }
     ctx2d.stroke();
-  }
-
-  if (aimMode === "ray" && gaze.origin && gaze.dir) {
-    const reach = Math.hypot(width, height);
-    const end = [gaze.origin[0] + gaze.dir[0] * reach, gaze.origin[1] + gaze.dir[1] * reach];
-    ctx2d.strokeStyle = gaze.hit ? THEME : "rgba(243, 239, 230, 0.92)";
-    ctx2d.lineWidth = gaze.hit ? 3 : 1.5;
-    ctx2d.beginPath();
-    ctx2d.moveTo(gaze.origin[0], gaze.origin[1]);
-    ctx2d.lineTo(end[0], end[1]);
-    ctx2d.stroke();
-    ctx2d.fillStyle = THEME;
-    ctx2d.fillRect(gaze.origin[0] - 4, gaze.origin[1] - 4, 8, 8);
   }
 }
 
@@ -265,21 +393,20 @@ function publishStatus(report) {
     return;
   }
   const camera = report.camera ?? cameraOn;
-  const face = report?.face ?? false;
   const hands = report?.hands ?? false;
-  const gazeOn = report?.gazeOn ?? false;
-  const scaling = report?.scaling ?? false;
-  const aimLabel = aimMode === "hand" ? "Target" : "Ray hit";
-  const checks = [checkItem("Camera", camera)];
-  if (aimMode === "ray") checks.push(checkItem("Face", face));
-  checks.push(
+  const scaling = Boolean(controller.active.selected);
+  const moving = Boolean(controller.move.selected);
+  const framed = appMode !== "base";
+  const checks = [
+    checkItem("Camera", camera),
     checkItem("Hands", hands),
-    checkItem(aimLabel, aimMode === "hand" ? camera : Boolean(face && gazeOn)),
-    checkItem("Scaling", scaling),
-  );
+    checkItem(framed ? "Zoom" : "Scaling", scaling),
+    checkItem(framed ? "Panning" : "Moving", moving),
+  ];
   checksBox.replaceChildren(...checks);
-  document.querySelector("#aim-hand")?.classList.toggle("active", aimMode === "hand");
-  document.querySelector("#aim-ray")?.classList.toggle("active", aimMode === "ray");
+  for (const mode of APPS) {
+    document.querySelector(`#app-${mode}`)?.classList.toggle("active", appMode === mode);
+  }
 
   let tone = "bad";
   let headline = "Camera off";
@@ -288,19 +415,19 @@ function publishStatus(report) {
   } else if (loopError) {
     headline = "Tracking error";
   } else if (scaling) {
-    headline = "Scaling";
+    headline = appMode === "base" ? "Scaling" : "Zooming";
     tone = "ok";
-  } else if (aimMode === "hand" && hands) {
+  } else if (moving && appMode !== "base") {
+    headline = "Panning";
+    tone = "ok";
+  } else if (moving) {
+    headline = "Moving";
+    tone = "ok";
+  } else if (hands) {
     headline = "Hand tracked";
     tone = "wait";
-  } else if (aimMode === "ray" && gazeOn) {
-    headline = "Ray on object";
-    tone = "wait";
-  } else if (aimMode === "ray" && face) {
-    headline = "Ray off object";
-    tone = "wait";
   } else if (camera) {
-    headline = aimMode === "hand" ? "Show a hand" : "Show your face";
+    headline = "Show a hand";
     tone = "wait";
   }
   verdictBox.textContent = headline;
@@ -331,7 +458,7 @@ async function createLandmarker(factory, modelPath, extra) {
 let fileset = null;
 
 async function ensureModels() {
-  if (handLandmarker && faceLandmarker) return;
+  if (handLandmarker) return;
   startButton.textContent = "Loading model";
   fileset = await FilesetResolver.forVisionTasks(WASM);
   handLandmarker = await createLandmarker(HandLandmarker, HAND_MODEL, {
@@ -340,12 +467,6 @@ async function ensureModels() {
     minHandDetectionConfidence: 0.5,
     minHandPresenceConfidence: 0.5,
     minTrackingConfidence: 0.5,
-  });
-  faceLandmarker = await createLandmarker(FaceLandmarker, FACE_MODEL, {
-    runningMode: "VIDEO",
-    numFaces: 1,
-    outputFaceBlendshapes: false,
-    outputFacialTransformationMatrixes: false,
   });
 }
 
@@ -431,28 +552,22 @@ function loop() {
 
   let left = null;
   let right = null;
-  let ray = { tracked: false, hit: false, points: 0, origin: null, dir: null };
   try {
     [left, right] = readHands(handLandmarker.detectForVideo(video, stamp), width, height);
-    ray = readFaceRay(faceLandmarker.detectForVideo(video, stamp), width, height, cards[0]);
     loopError = "";
   } catch (error) {
     loopError = error.message ?? String(error);
   }
 
-  const gaze = aimMode === "hand"
-    ? { tracked: true, x: cards[0].nx * width, y: cards[0].ny * height, hit: true, origin: null, dir: null }
-    : ray;
-  const frame = makeContext(now, dt, width, height, left, right, gaze, cards, aimMode);
+  const gaze = { tracked: true, x: cards[0].nx * width, y: cards[0].ny * height, hit: true, origin: null, dir: null };
+  const frame = makeContext(now, dt, width, height, left, right, gaze, cards, "hand");
   controller.update(frame);
   drawScene(width, height, left, right, gaze);
-  const gazeOn = aimMode === "hand" ? true : Boolean(ray.hit);
   publishStatus({
     camera: true,
-    face: ray.points > 0,
     hands: Boolean(left || right),
-    gazeOn,
     scaling: Boolean(controller.active.selected),
+    panning: appMode !== "base" && Boolean(controller.move.selected),
   });
   requestAnimationFrame(loop);
 }
@@ -506,6 +621,17 @@ async function startCamera() {
   }
 }
 
+function setApp(mode) {
+  appMode = mode;
+  for (const card of cards) card.useMode(mode);
+  const goal = document.querySelector("#goal");
+  goal.hidden = !GOALS[mode];
+  if (GOALS[mode]) goal.textContent = GOALS[mode];
+  controller.resetAll();
+  publishStatus();
+  if (!running) drawScene(canvas.width, canvas.height, null, null, { tracked: false, x: 0, y: 0 });
+}
+
 function bindControls() {
   for (const [method, label] of METHODS) {
     const button = document.createElement("button");
@@ -526,16 +652,9 @@ function bindControls() {
     controller.toggleDominant();
     publishStatus();
   });
-  document.querySelector("#aim-hand").addEventListener("click", () => {
-    aimMode = "hand";
-    controller.resetAll();
-    publishStatus();
-  });
-  document.querySelector("#aim-ray").addEventListener("click", () => {
-    aimMode = "ray";
-    controller.resetAll();
-    publishStatus();
-  });
+  document.querySelector("#app-base").addEventListener("click", () => setApp("base"));
+  document.querySelector("#app-map").addEventListener("click", () => setApp("map"));
+  document.querySelector("#app-cad").addEventListener("click", () => setApp("cad"));
   document.querySelector("#palm").addEventListener("click", () => controller.uniSemi.togglePalm());
   document.querySelector("#reset").addEventListener("click", () => {
     cards.forEach((card) => card.reset());
@@ -553,9 +672,7 @@ function bindControls() {
       cards.forEach((card) => card.reset());
       controller.resetAll();
     } else if (event.key === "q" || event.key === "Q") {
-      aimMode = aimMode === "hand" ? "ray" : "hand";
-      controller.resetAll();
-      publishStatus();
+      setApp(APPS[(APPS.indexOf(appMode) + 1) % APPS.length]);
     }
   });
 }

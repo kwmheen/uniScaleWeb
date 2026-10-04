@@ -112,7 +112,7 @@ class InteractionTests(unittest.TestCase):
         self.assertIsNone(yielded.selected)
         self.assertTrue(yielded.yielded)
 
-    def test_uni_depth_pull_toward_camera_grows(self):
+    def test_uni_depth_push_toward_camera_shrinks(self):
         interaction = UniDepth()
         obj = box()
         other = hand("Left", index_pinch=True)
@@ -120,7 +120,7 @@ class InteractionTests(unittest.TestCase):
         interaction.update(context(obj, (500, 500), other, hand("Right"), time=0.0))
         other.camera[INDEX_TIP, 2] = 0.4
         interaction.update(context(obj, (500, 500), other, hand("Right"), time=0.1))
-        self.assertAlmostEqual(obj.scale, 1.1, places=4)
+        self.assertAlmostEqual(obj.scale, 0.9, places=4)
 
     def test_uni_angle_roll_changes_scale(self):
         interaction = UniAngle()

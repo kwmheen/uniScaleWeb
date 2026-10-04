@@ -36,6 +36,25 @@ function clampScale(scale, min, max) {
   return Math.min(max, Math.max(min, scale));
 }
 
+function spatial(target) {
+  return target?.mode === "map" || target?.mode === "cad";
+}
+
+function readZoom(target) {
+  if (!target) return 1;
+  return spatial(target) ? target.mapZoom : target.scale;
+}
+
+function writeZoom(target, value) {
+  if (!target) return;
+  if (spatial(target)) {
+    target.mapZoom = Math.min(target.mapMax, Math.max(1, value));
+    target.clampMap();
+    return;
+  }
+  target.scale = value;
+}
+
 function speedLevel(absValue, slow, normal) {
   if (absValue <= slow) return "slow";
   if (absValue <= normal) return "normal";
@@ -157,7 +176,35 @@ export class Card {
     this.nh = nh;
     this.color = color;
     this.scale = 1;
+    this.mode = "base";
+    this.mapZoom = 1;
+    this.mapX = 0.5;
+    this.mapY = 0.5;
+    this.mapMax = 10;
+    this.view = {
+      map: { zoom: 1, x: 0.5, y: 0.5 },
+      cad: { zoom: 1, x: 0.5, y: 0.5 },
+    };
     this.home = { nx, ny, scale: 1 };
+  }
+  rememberView() {
+    if (!spatial(this)) return;
+    this.view[this.mode] = { zoom: this.mapZoom, x: this.mapX, y: this.mapY };
+  }
+  useMode(mode) {
+    this.rememberView();
+    this.mode = mode;
+    const saved = this.view[mode];
+    if (!saved) return;
+    this.mapZoom = saved.zoom;
+    this.mapX = saved.x;
+    this.mapY = saved.y;
+  }
+  clampMap() {
+    const half = 0.5 / this.mapZoom;
+    const limit = (value) => Math.min(1 - half, Math.max(half, value));
+    this.mapX = limit(this.mapX);
+    this.mapY = limit(this.mapY);
   }
   get area() {
     return this.nw * this.nh * this.scale * this.scale;
@@ -170,14 +217,22 @@ export class Card {
     return Math.abs(x - cx) <= halfW && Math.abs(y - cy) <= halfH;
   }
   rect(width, height) {
-    const boxW = this.nw * width * this.scale;
-    const boxH = this.nh * height * this.scale;
+    const map = spatial(this);
+    const scale = map ? 1 : this.scale;
+    const nw = map ? 0.5 : this.nw;
+    const nh = map ? 0.62 : this.nh;
+    const boxW = nw * width * scale;
+    const boxH = nh * height * scale;
     return [this.nx * width - boxW / 2, this.ny * height - boxH / 2, boxW, boxH];
   }
   reset() {
     this.nx = this.home.nx;
     this.ny = this.home.ny;
     this.scale = this.home.scale;
+    this.mapZoom = 1;
+    this.mapX = 0.5;
+    this.mapY = 0.5;
+    if (spatial(this)) this.view[this.mode] = { zoom: 1, x: 0.5, y: 0.5 };
   }
 }
 
@@ -259,7 +314,7 @@ class BiDistance {
     if (gazed && both && this.stable && !this.selected) {
       this.selected = gazed;
       this.initialDistance = this.distance(ctx);
-      this.initialScale = gazed.scale;
+      this.initialScale = readZoom(gazed);
       this.clutch.reset();
     }
     if (this.selected && both && this.stable) this.zoom(ctx);
@@ -280,12 +335,12 @@ class BiDistance {
         this.maxScaleSpeed,
       );
       const scaleDelta = direction * this.continuousZoomSpeed * mult * ctx.dt;
-      this.selected.scale = clampScale(this.selected.scale * (1 + scaleDelta), this.minScale, this.maxScale);
+      writeZoom(this.selected, clampScale(readZoom(this.selected) * (1 + scaleDelta), this.minScale, this.maxScale));
       return;
     }
     const ratio = current / this.initialDistance;
     const zoom = Math.pow(ratio, this.zoomSensitivity);
-    this.selected.scale = clampScale(this.initialScale * zoom, this.minScale, this.maxScale);
+    writeZoom(this.selected, clampScale(this.initialScale * zoom, this.minScale, this.maxScale));
   }
   deselect() {
     this.selected = null;
@@ -350,7 +405,7 @@ class BiSemi {
     const gazed = gazedObject(ctx);
     if (gazed && pinching && !this.wasDh && !this.selected) {
       this.selected = gazed;
-      this.initialScale = gazed.scale;
+      this.initialScale = readZoom(gazed);
       this.initialDistance = this.ndhDistanceOf(ctx);
       this.ready = this.initialDistance > 0;
       this.clutch.reset();
@@ -376,12 +431,12 @@ class BiSemi {
         this.maxScaleSpeed,
       );
       const scaleDelta = direction * this.continuousZoomSpeed * mult * ctx.dt;
-      this.selected.scale = clampScale(this.selected.scale * (1 + scaleDelta), this.minScale, this.maxScale);
+      writeZoom(this.selected, clampScale(readZoom(this.selected) * (1 + scaleDelta), this.minScale, this.maxScale));
       return;
     }
     const ratio = current / this.initialDistance;
     const zoom = 1 + (ratio - 1) * this.zoomSensitivity;
-    this.selected.scale = clampScale(this.initialScale * zoom, this.minScale, this.maxScale);
+    writeZoom(this.selected, clampScale(this.initialScale * zoom, this.minScale, this.maxScale));
   }
   deselect() {
     this.selected = null;
@@ -404,6 +459,7 @@ class DhGazePinch {
     this.wasPinching = false;
     this.handAnchor = [0, 0];
     this.objectAnchor = [0.5, 0.5];
+    this.panning = false;
     this.yielded = false;
   }
   setDominantRight(value) {
@@ -434,7 +490,8 @@ class DhGazePinch {
       if (gazed && hand) {
         this.selected = gazed;
         this.handAnchor = [...hand.pixel[WRIST]];
-        this.objectAnchor = [gazed.nx, gazed.ny];
+        this.panning = spatial(gazed);
+        this.objectAnchor = this.panning ? [gazed.mapX, gazed.mapY] : [gazed.nx, gazed.ny];
       }
     } else if (!pinching && this.wasPinching) {
       this.selected = null;
@@ -445,6 +502,13 @@ class DhGazePinch {
     if (!hand || ctx.width <= 0 || ctx.height <= 0) return;
     const dx = (hand.pixel[WRIST][0] - this.handAnchor[0]) * this.sensitivity;
     const dy = (hand.pixel[WRIST][1] - this.handAnchor[1]) * this.sensitivity;
+    if (spatial(this.selected)) {
+      const zoom = this.selected.mapZoom;
+      this.selected.mapX = this.objectAnchor[0] + dx / ctx.width / zoom;
+      this.selected.mapY = this.objectAnchor[1] + dy / ctx.height / zoom;
+      this.selected.clampMap();
+      return;
+    }
     this.selected.nx = Math.min(0.92, Math.max(0.08, this.objectAnchor[0] + dx / ctx.width));
     this.selected.ny = Math.min(0.9, Math.max(0.1, this.objectAnchor[1] + dy / ctx.height));
   }
@@ -494,7 +558,7 @@ class UniAngle {
     const gazed = gazedObject(ctx);
     if (gazed && pinching && !this.wasPinching && !this.selected) {
       this.selected = gazed;
-      this.initialScale = gazed.scale;
+      this.initialScale = readZoom(gazed);
     } else if (!pinching && this.wasPinching && this.selected) {
       this.deselect();
     }
@@ -526,11 +590,11 @@ class UniAngle {
         this.maxScaleSpeed,
       );
       const scaleDelta = direction * this.continuousZoomSpeed * mult * ctx.dt;
-      this.selected.scale = clampScale(this.selected.scale * (1 + scaleDelta), this.minScale, this.maxScale);
+      writeZoom(this.selected, clampScale(readZoom(this.selected) * (1 + scaleDelta), this.minScale, this.maxScale));
       return;
     }
     const ratio = 1 + (delta / 90) * this.scaleSensitivity * this.rotationSensitivity;
-    this.selected.scale = clampScale(this.initialScale * ratio, this.minScale, this.maxScale);
+    writeZoom(this.selected, clampScale(this.initialScale * ratio, this.minScale, this.maxScale));
   }
   deselect() {
     this.selected = null;
@@ -584,7 +648,7 @@ class UniDepth {
     const gazed = gazedObject(ctx);
     if (gazed && pinching && !this.wasPinching && !this.selected) {
       this.selected = gazed;
-      this.initialScale = gazed.scale;
+      this.initialScale = readZoom(gazed);
     } else if (!pinching && this.wasPinching && this.selected) {
       this.deselect();
     }
@@ -609,7 +673,7 @@ class UniDepth {
     if (!this.ready || !this.selected) return;
     const zDistance = this.z - this.initialZ;
     if (this.free) {
-      const direction = this.clutch.step(-zDistance);
+      const direction = this.clutch.step(zDistance);
       const mult = speedMultiplier(
         speedLevel(Math.abs(zDistance), this.slowThreshold, this.normalThreshold),
         this.slowM,
@@ -618,11 +682,11 @@ class UniDepth {
         this.maxScaleSpeed,
       );
       const scaleDelta = direction * this.continuousZoomSpeed * mult * ctx.dt;
-      this.selected.scale = clampScale(this.selected.scale * (1 + scaleDelta), this.minScale, this.maxScale);
+      writeZoom(this.selected, clampScale(readZoom(this.selected) * (1 + scaleDelta), this.minScale, this.maxScale));
       return;
     }
-    const zoom = 1 - zDistance * this.pushPullSensitivity * this.zoomSensitivity;
-    this.selected.scale = clampScale(this.initialScale * zoom, this.minScale, this.maxScale);
+    const zoom = 1 + zDistance * this.pushPullSensitivity * this.zoomSensitivity;
+    writeZoom(this.selected, clampScale(this.initialScale * zoom, this.minScale, this.maxScale));
   }
   deselect() {
     this.selected = null;
@@ -747,8 +811,8 @@ class UniMicro {
   select(target, now) {
     this.clearGesture();
     this.selected = target;
-    this.initialScale = target.scale;
-    this.lastScale = target.scale;
+    this.initialScale = readZoom(target);
+    this.lastScale = readZoom(target);
     this.lastChange = now;
   }
   initialize(hand) {
@@ -781,17 +845,18 @@ class UniMicro {
     if (Math.abs(this.zoomFactor) <= 0.001) return;
     if (this.free) {
       const scaleDelta = this.zoomFactor * this.continuousZoomSpeed * ctx.dt;
-      this.selected.scale = clampScale(this.selected.scale * (1 + scaleDelta), this.minScale, this.maxScale);
+      writeZoom(this.selected, clampScale(readZoom(this.selected) * (1 + scaleDelta), this.minScale, this.maxScale));
       return;
     }
     const multiplier = 1 + this.zoomFactor * this.zoomSensitivity;
-    this.selected.scale = clampScale(this.initialScale * multiplier, this.minScale, this.maxScale);
+    writeZoom(this.selected, clampScale(this.initialScale * multiplier, this.minScale, this.maxScale));
   }
   track(ctx) {
     if (!this.selected) return;
-    if (Math.abs(this.selected.scale - this.lastScale) > this.changeThreshold) {
+    const zoom = readZoom(this.selected);
+    if (Math.abs(zoom - this.lastScale) > this.changeThreshold) {
       this.lastChange = ctx.time;
-      this.lastScale = this.selected.scale;
+      this.lastScale = zoom;
     }
   }
   clearGesture() {
@@ -867,7 +932,7 @@ class UniSemi {
     const gazed = gazedObject(ctx);
     if (gazed && this.locked && !this.selected) {
       this.selected = gazed;
-      this.initialScale = gazed.scale;
+      this.initialScale = readZoom(gazed);
       this.initialDistance = hand.indexThumb;
       this.ready = this.initialDistance > 0;
       this.clutch.reset();
@@ -892,12 +957,12 @@ class UniSemi {
         this.maxScaleSpeed,
       );
       const scaleDelta = direction * this.continuousZoomSpeed * mult * ctx.dt;
-      this.selected.scale = clampScale(this.selected.scale * (1 + scaleDelta), this.minScale, this.maxScale);
+      writeZoom(this.selected, clampScale(readZoom(this.selected) * (1 + scaleDelta), this.minScale, this.maxScale));
       return;
     }
     const ratio = current / this.initialDistance;
     const zoom = 1 + (ratio - 1) * this.zoomSensitivity;
-    this.selected.scale = clampScale(this.initialScale * zoom, this.minScale, this.maxScale);
+    writeZoom(this.selected, clampScale(this.initialScale * zoom, this.minScale, this.maxScale));
   }
   deselect() {
     this.selected = null;

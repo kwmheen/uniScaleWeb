@@ -102,8 +102,8 @@ class UniDepth:
             return
         z_distance = self.current_z - self.initial_z
         if self.hand_motion_mode == HandMotionMode.CLUTCHING_FREE:
-            # 카메라에 가까워지면(Z 감소) 커지도록 부호를 뒤집습니다.
-            direction = self.clutch.step(-z_distance)
+            # 카메라에 가까워지면(Z 감소) 작아지도록 둡니다.
+            direction = self.clutch.step(z_distance)
             level = speed_level(abs(z_distance), self.slow_threshold, self.normal_threshold)
             mult = speed_multiplier(
                 level,
@@ -116,5 +116,5 @@ class UniDepth:
             self.selected.scale = apply_delta(self.selected.scale, scale_delta, self.min_scale, self.max_scale)
             return
 
-        zoom = 1.0 - (z_distance * self.push_pull_sensitivity * self.zoom_sensitivity)
+        zoom = 1.0 + (z_distance * self.push_pull_sensitivity * self.zoom_sensitivity)
         self.selected.scale = apply_ratio(self.initial_scale, zoom, self.min_scale, self.max_scale)
