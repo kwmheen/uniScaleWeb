@@ -4,7 +4,6 @@ import {
   HandLandmarker,
 } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/+esm";
 import {
-  HELP,
   METHODS,
   InteractionController,
   createCards,
@@ -28,6 +27,7 @@ const CONNECTIONS = [
   [13, 17], [17, 18], [18, 19], [19, 20],
   [0, 17],
 ];
+const THEME = "#2a52be";
 const NOSE = 1;
 const LEFT_CHEEK = 234;
 const RIGHT_CHEEK = 454;
@@ -38,8 +38,6 @@ const stage = document.querySelector("#stage");
 const startButton = document.querySelector("#start");
 const verdictBox = document.querySelector("#verdict");
 const checksBox = document.querySelector("#checks");
-const detailBox = document.querySelector("#detail");
-const helpBox = document.querySelector("#help");
 const modeBox = document.querySelector("#modes");
 const ctx2d = canvas.getContext("2d");
 
@@ -201,8 +199,8 @@ function drawScene(width, height, left, right, gaze) {
     ctx2d.fillStyle = "#171a22";
     ctx2d.fillRect(0, 0, width, height);
     ctx2d.fillStyle = "#f4f1ea";
-    ctx2d.font = "bold 28px Malgun Gothic, sans-serif";
-    ctx2d.fillText("카메라가 꺼져 있습니다", 48, height / 2);
+    ctx2d.font = "bold 28px Palatino Linotype, Georgia, serif";
+    ctx2d.fillText("Camera off", 48, height / 2);
   }
   const scaleSelected = controller.active.selected;
   const moveSelected = controller.move.selected;
@@ -213,7 +211,7 @@ function drawScene(width, height, left, right, gaze) {
     ctx2d.fillStyle = "rgba(243, 239, 230, 0.82)";
     ctx2d.fillRect(x, y, w, h);
     ctx2d.lineWidth = active ? 3 : 1.5;
-    ctx2d.strokeStyle = aimed || active ? "#c8392c" : "#161616";
+    ctx2d.strokeStyle = aimed || active ? THEME : "#161616";
     ctx2d.strokeRect(x, y, w, h);
     ctx2d.fillStyle = "#161616";
     ctx2d.font = "24px Palatino Linotype, Georgia, serif";
@@ -222,7 +220,7 @@ function drawScene(width, height, left, right, gaze) {
 
   for (const hand of [left, right]) {
     if (!hand) continue;
-    ctx2d.strokeStyle = hand.indexPinching || hand.middlePinching ? "#c8392c" : "#f3efe6";
+    ctx2d.strokeStyle = hand.indexPinching || hand.middlePinching ? THEME : "#f3efe6";
     ctx2d.lineWidth = 3;
     ctx2d.beginPath();
     for (const [start, end] of CONNECTIONS) {
@@ -235,30 +233,24 @@ function drawScene(width, height, left, right, gaze) {
   if (aimMode === "ray" && gaze.origin && gaze.dir) {
     const reach = Math.hypot(width, height);
     const end = [gaze.origin[0] + gaze.dir[0] * reach, gaze.origin[1] + gaze.dir[1] * reach];
-    ctx2d.strokeStyle = gaze.hit ? "#c8392c" : "rgba(243, 239, 230, 0.92)";
+    ctx2d.strokeStyle = gaze.hit ? THEME : "rgba(243, 239, 230, 0.92)";
     ctx2d.lineWidth = gaze.hit ? 3 : 1.5;
     ctx2d.beginPath();
     ctx2d.moveTo(gaze.origin[0], gaze.origin[1]);
     ctx2d.lineTo(end[0], end[1]);
     ctx2d.stroke();
-    ctx2d.fillStyle = "#c8392c";
+    ctx2d.fillStyle = THEME;
     ctx2d.fillRect(gaze.origin[0] - 4, gaze.origin[1] - 4, 8, 8);
   }
 }
 
-function pinchText(hand, name) {
-  if (!hand) return `${name} 없음`;
-  return `${name} 검지 ${hand.indexThumb.toFixed(3)}m ${hand.indexPinching ? "핀치" : "열림"} / 중지 ${hand.middleThumb.toFixed(3)}m`;
-}
-
-function checkItem(label, ok, detail) {
+function checkItem(label, ok) {
   const item = document.createElement("li");
   const name = document.createElement("span");
   const mark = document.createElement("span");
   name.textContent = label;
-  mark.textContent = ok ? "됨" : "안 됨";
+  mark.textContent = ok ? "On" : "Off";
   mark.className = ok ? "ok" : "bad";
-  if (detail) name.textContent = `${label} · ${detail}`;
   item.append(name, mark);
   return item;
 }
@@ -267,10 +259,9 @@ function publishStatus(report) {
   if (report) lastReport = report;
   report = report ?? lastReport ?? {};
   if (report.stopped || shuttingDown) {
-    checksBox.replaceChildren(checkItem("카메라 영상", false), checkItem("서버", false));
-    verdictBox.textContent = "종료됨";
+    checksBox.replaceChildren(checkItem("Camera", false), checkItem("Server", false));
+    verdictBox.textContent = "Stopped";
     verdictBox.className = "verdict bad";
-    detailBox.textContent = report.detail || "카메라와 서버가 꺼졌습니다. 이 창을 닫으면 됩니다.";
     return;
   }
   const camera = report.camera ?? cameraOn;
@@ -278,53 +269,44 @@ function publishStatus(report) {
   const hands = report?.hands ?? false;
   const gazeOn = report?.gazeOn ?? false;
   const scaling = report?.scaling ?? false;
-  const scaleText = report?.scaleText ?? "";
-  const aimLabel = aimMode === "hand" ? "대상은 항상 선택" : "레이가 오브젝트에 닿음";
-  const checks = [checkItem("카메라 영상", camera)];
-  if (aimMode === "ray") checks.push(checkItem("얼굴", face, report?.faceDetail ?? ""));
+  const aimLabel = aimMode === "hand" ? "Target" : "Ray hit";
+  const checks = [checkItem("Camera", camera)];
+  if (aimMode === "ray") checks.push(checkItem("Face", face));
   checks.push(
-    checkItem("손", hands, report?.handDetail ?? ""),
+    checkItem("Hands", hands),
     checkItem(aimLabel, aimMode === "hand" ? camera : Boolean(face && gazeOn)),
-    checkItem("크기 조절", scaling, scaleText),
+    checkItem("Scaling", scaling),
   );
   checksBox.replaceChildren(...checks);
   document.querySelector("#aim-hand")?.classList.toggle("active", aimMode === "hand");
   document.querySelector("#aim-ray")?.classList.toggle("active", aimMode === "ray");
-  const aimNote = document.querySelector("#aim-note");
-  if (aimNote) {
-    aimNote.textContent = aimMode === "hand"
-      ? "시선은 맞은 것으로 둡니다. 손 제스처만으로 크기가 바뀝니다."
-      : "코끝에서 레이가 나갑니다. 고개를 돌려 오브젝트를 맞춘 뒤 손으로 크기를 바꿉니다.";
-  }
 
   let tone = "bad";
-  let headline = "카메라 꺼짐";
+  let headline = "Camera off";
   if (!camera) {
-    headline = "카메라 꺼짐";
+    headline = "Camera off";
   } else if (loopError) {
-    headline = "추적 오류";
+    headline = "Tracking error";
   } else if (scaling) {
-    headline = "크기 조절 중";
+    headline = "Scaling";
     tone = "ok";
   } else if (aimMode === "hand" && hands) {
-    headline = "손 추적 됨";
+    headline = "Hand tracked";
     tone = "wait";
   } else if (aimMode === "ray" && gazeOn) {
-    headline = "레이가 오브젝트에 닿음";
+    headline = "Ray on object";
     tone = "wait";
   } else if (aimMode === "ray" && face) {
-    headline = "레이가 오브젝트를 비껴 감";
+    headline = "Ray off object";
     tone = "wait";
   } else if (camera) {
-    headline = aimMode === "hand" ? "손을 보여 주세요" : "얼굴을 보여 주세요";
+    headline = aimMode === "hand" ? "Show a hand" : "Show your face";
     tone = "wait";
   }
   verdictBox.textContent = headline;
   verdictBox.className = `verdict ${tone}`;
-  detailBox.textContent = [report?.detail ?? "", loopError].filter(Boolean).join(" ");
-  helpBox.textContent = HELP[controller.method];
   document.querySelector("#clutch").textContent = controller.free ? "ClutchingFree" : "Clutching";
-  document.querySelector("#hand").textContent = controller.dominantRight ? "우세손 오른손" : "우세손 왼손";
+  document.querySelector("#hand").textContent = controller.dominantRight ? "Right hand" : "Left hand";
   for (const button of modeBox.querySelectorAll("button")) {
     button.classList.toggle("active", button.dataset.method === controller.method);
   }
@@ -350,7 +332,7 @@ let fileset = null;
 
 async function ensureModels() {
   if (handLandmarker && faceLandmarker) return;
-  startButton.textContent = "모델 불러오는 중";
+  startButton.textContent = "Loading model";
   fileset = await FilesetResolver.forVisionTasks(WASM);
   handLandmarker = await createLandmarker(HandLandmarker, HAND_MODEL, {
     runningMode: "VIDEO",
@@ -391,25 +373,17 @@ async function shutdownApp() {
   releaseCamera();
   const stopButton = document.querySelector("#stop");
   stopButton.disabled = true;
-  stopButton.textContent = "끄는 중";
+  stopButton.textContent = "Quitting";
   startButton.hidden = true;
-  publishStatus({
-    camera: false,
-    stopped: true,
-    detail: "카메라와 서버를 끄는 중입니다.",
-  });
+  publishStatus({ camera: false, stopped: true });
   drawScene(canvas.width, canvas.height, null, null, { tracked: false, x: 0, y: 0 });
   try {
     await fetch("/shutdown", { method: "POST", keepalive: true });
   } catch {
     // 서버가 이미 꺼진 경우에도 카메라는 위에서 멈춰 있다.
   }
-  stopButton.textContent = "종료됨";
-  publishStatus({
-    camera: false,
-    stopped: true,
-    detail: "카메라와 서버가 꺼졌습니다. 이 창을 닫으면 됩니다.",
-  });
+  stopButton.textContent = "Stopped";
+  publishStatus({ camera: false, stopped: true });
 }
 
 function startHeartbeat() {
@@ -425,13 +399,9 @@ function startHeartbeat() {
       releaseCamera();
       const stopButton = document.querySelector("#stop");
       stopButton.disabled = true;
-      stopButton.textContent = "종료됨";
+      stopButton.textContent = "Stopped";
       startButton.hidden = true;
-      publishStatus({
-        camera: false,
-        stopped: true,
-        detail: "서버가 꺼져 카메라를 멈췄습니다. 이 창을 닫으면 됩니다.",
-      });
+      publishStatus({ camera: false, stopped: true });
       drawScene(canvas.width, canvas.height, null, null, { tracked: false, x: 0, y: 0 });
     }
   };
@@ -467,7 +437,7 @@ function loop() {
     ray = readFaceRay(faceLandmarker.detectForVideo(video, stamp), width, height, cards[0]);
     loopError = "";
   } catch (error) {
-    loopError = `추적 오류: ${error.message ?? error}`;
+    loopError = error.message ?? String(error);
   }
 
   const gaze = aimMode === "hand"
@@ -476,19 +446,13 @@ function loop() {
   const frame = makeContext(now, dt, width, height, left, right, gaze, cards, aimMode);
   controller.update(frame);
   drawScene(width, height, left, right, gaze);
-  const target = cards[0];
   const gazeOn = aimMode === "hand" ? true : Boolean(ray.hit);
-  const handDetail = [left ? pinchText(left, "왼손") : "", right ? pinchText(right, "오른손") : ""].filter(Boolean).join(" / ");
   publishStatus({
     camera: true,
     face: ray.points > 0,
-    faceDetail: ray.points ? `${ray.points}점` : "",
     hands: Boolean(left || right),
-    handDetail,
     gazeOn,
     scaling: Boolean(controller.active.selected),
-    scaleText: target ? `${target.scale.toFixed(2)}배` : "",
-    detail: `${fps.toFixed(0)} FPS · ${controller.lines().join(" · ")}`,
   });
   requestAnimationFrame(loop);
 }
@@ -498,7 +462,7 @@ async function startCamera() {
   startButton.disabled = true;
   try {
     await ensureModels();
-    startButton.textContent = "카메라 연결 중";
+    startButton.textContent = "Connecting";
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: false,
       video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
@@ -513,11 +477,8 @@ async function startCamera() {
   } catch (error) {
     cameraOn = false;
     startButton.disabled = false;
-    startButton.textContent = "카메라 시작";
-    publishStatus({
-      camera: false,
-      detail: `카메라를 열지 못했습니다. 브라우저에서 카메라 허용을 눌러 주세요. (${error.message ?? error})`,
-    });
+    startButton.textContent = "Start camera";
+    publishStatus({ camera: false });
   }
 }
 
@@ -576,11 +537,6 @@ function bindControls() {
 }
 
 bindControls();
-publishStatus({
-  camera: false,
-  detail: location.protocol === "file:"
-    ? "파일을 직접 열면 카메라가 막힙니다. run.bat 으로 여세요."
-    : "카메라 시작을 누르면 영상이 이 화면에 그려집니다. 종료를 누르면 카메라와 서버가 같이 꺼집니다.",
-});
+publishStatus({ camera: false });
 if (location.protocol !== "file:") startHeartbeat();
 drawScene(canvas.width, canvas.height, null, null, { tracked: false, x: 0, y: 0 });

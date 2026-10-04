@@ -133,13 +133,20 @@ class InteractionTests(unittest.TestCase):
         interaction.update(context(obj, (500, 500), other, hand("Right"), time=0.1))
         self.assertAlmostEqual(obj.scale, 1.5, places=4)
 
-    def test_uni_semi_requires_palm_lock(self):
+    def test_uni_semi_locks_when_palm_faces_user(self):
         interaction = UniSemi()
         obj = box()
+        toward_camera = hand("Left")
+        toward_camera.world[WRIST] = (0.0, 0.0, 0.0)
+        toward_camera.world[INDEX_MCP] = (1.0, 0.0, 0.0)
+        toward_camera.world[PINKY_MCP] = (0.0, 1.0, 0.0)
+        interaction.update(context(obj, (500, 500), toward_camera, hand("Right"), time=0.0))
+        self.assertFalse(interaction.locked)
+
         other = hand("Left")
         other.world[WRIST] = (0.0, 0.0, 0.0)
-        other.world[INDEX_MCP] = (1.0, 0.0, 0.0)
-        other.world[PINKY_MCP] = (0.0, 1.0, 0.0)
+        other.world[INDEX_MCP] = (0.0, 1.0, 0.0)
+        other.world[PINKY_MCP] = (1.0, 0.0, 0.0)
         other.world[THUMB_TIP] = (0.0, 0.0, 0.0)
         other.world[INDEX_TIP] = (0.05, 0.0, 0.0)
         interaction.update(context(obj, (500, 500), other, hand("Right"), time=0.0))

@@ -2,7 +2,7 @@
   --paper: #f3efe6;
   --ink: #161616;
   --muted: #5e584f;
-  --accent: #c8392c;
+  --accent: #2a52be;
   --serif: "Palatino Linotype", Palatino, Georgia, serif;
   --sans: "Segoe UI", "Malgun Gothic", sans-serif;
 }
@@ -19,8 +19,6 @@ body {
 
 header {
   display: flex;
-  justify-content: space-between;
-  gap: 32px;
   align-items: end;
   padding: 28px 36px 18px;
   border-bottom: 1px solid var(--ink);
@@ -47,13 +45,6 @@ h1 {
   font-weight: 500;
   letter-spacing: -0.04em;
   line-height: 0.95;
-}
-
-#summary {
-  max-width: 460px;
-  color: var(--muted);
-  line-height: 1.5;
-  font-size: 14px;
 }
 
 main {
@@ -97,8 +88,8 @@ canvas {
   transform: translate(-50%, -50%);
   z-index: 2;
   border: 0;
-  background: var(--ink);
-  color: var(--paper);
+  background: var(--accent);
+  color: #f3efe6;
   padding: 14px 22px;
   font: 600 14px var(--sans);
   letter-spacing: 0.08em;
@@ -139,27 +130,22 @@ button {
 }
 
 button.active {
-  background: var(--ink);
-  color: var(--paper);
+  background: var(--accent);
+  color: #f3efe6;
+  border-color: var(--accent);
 }
 
 button:hover { background: #e7e1d6; }
-button.active:hover { background: var(--ink); }
+button.active:hover { background: var(--accent); }
 
 #stop {
-  background: var(--ink);
-  color: var(--paper);
+  background: var(--accent);
+  color: #f3efe6;
+  border-color: var(--accent);
 }
 
-#stop:hover { background: var(--accent); color: var(--paper); }
-#stop:disabled { cursor: default; background: var(--muted); }
-
-#aim-note, #help, #detail {
-  margin-top: 12px;
-  color: var(--muted);
-  line-height: 1.5;
-  font-size: 14px;
-}
+#stop:hover { background: #1e3f96; color: #f3efe6; }
+#stop:disabled { cursor: default; background: var(--muted); border-color: var(--muted); }
 
 .verdict {
   font-family: var(--serif);

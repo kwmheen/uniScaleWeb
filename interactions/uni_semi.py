@@ -21,7 +21,7 @@ class UniSemi:
         self.lock_threshold = 0.55
         self.unlock_threshold = 0.4
         self.x_rotation_adjustment = 20.0
-        self.palm_sign = 1.0
+        self.palm_sign = -1.0
         self.min_scale = 0.1
         self.max_scale = 10.0
         self.zoom_sensitivity = 0.75

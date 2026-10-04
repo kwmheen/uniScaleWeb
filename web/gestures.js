@@ -9,15 +9,6 @@ export const METHODS = [
   ["biDistance", "6 biDistance"],
 ];
 
-export const HELP = {
-  uniDepth: "카드를 보고 비우세손을 핀치한 뒤, 손을 카메라 쪽으로 당기면 커집니다.",
-  uniAngle: "카드를 보고 비우세손을 핀치한 채 손목을 기울이면 크기가 바뀝니다.",
-  uniMicro: "비우세손 엄지를 검지에 붙여 탭한 뒤, 엄지를 조금만 움직입니다.",
-  uniSemi: "비우세손 손바닥을 카메라에 보여 잠근 뒤, 검지와 엄지 간격으로 크기를 바꿉니다.",
-  biSemi: "우세손은 중지와 엄지를 붙이고, 반대손 검지·엄지 간격으로 크기를 바꿉니다.",
-  biDistance: "카드를 보고 양손 검지를 동시에 집으면 두 손 사이 거리로 크기가 바뀝니다.",
-};
-
 const WRIST = 0;
 const THUMB_MCP = 2;
 const THUMB_TIP = 4;
@@ -191,7 +182,7 @@ export class Card {
 }
 
 export function createCards() {
-  return [new Card("오브젝트", 0.5, 0.46, 0.22, 0.28, "#4c8dff")];
+  return [new Card("Object", 0.5, 0.46, 0.22, 0.28, "#2a52be")];
 }
 
 function gazedObject(ctx) {
@@ -830,7 +821,7 @@ class UniSemi {
     this.lockThreshold = 0.55;
     this.unlockThreshold = 0.4;
     this.xRotation = 20;
-    this.palmSign = 1;
+    this.palmSign = -1;
     this.minScale = 0.1;
     this.maxScale = 10;
     this.zoomSensitivity = 0.75;

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -12,46 +12,39 @@
       <span class="mark" aria-hidden="true"></span>
       <h1>uniScale</h1>
     </div>
-    <p id="summary">오브젝트는 하나입니다. 손만 쓰는 모드에서는 시선이 맞은 것으로 두고, 얼굴 레이 모드에서는 코끝에서 나간 선이 오브젝트를 맞출 때만 크기가 바뀝니다.</p>
   </header>
   <main>
     <section class="stage" id="stage">
       <video id="video" playsinline autoplay muted></video>
       <canvas id="canvas" width="960" height="540"></canvas>
-      <button id="start" class="start" type="button">카메라 시작</button>
+      <button id="start" class="start" type="button">Start camera</button>
     </section>
     <aside>
       <section>
-        <h2>조준</h2>
+        <h2>Aim</h2>
         <div class="aim">
-          <button id="aim-hand" class="active" type="button">손만</button>
-          <button id="aim-ray" type="button">얼굴 레이</button>
+          <button id="aim-hand" class="active" type="button">Hand</button>
+          <button id="aim-ray" type="button">Face ray</button>
         </div>
-        <p id="aim-note"></p>
       </section>
       <section>
-        <h2>스케일 방식</h2>
+        <h2>Scale</h2>
         <div class="modes" id="modes"></div>
       </section>
       <section>
-        <h2>설정</h2>
+        <h2>Settings</h2>
         <div class="settings">
           <button id="clutch" type="button">Clutching</button>
-          <button id="hand" type="button">우세손 오른손</button>
-          <button id="palm" type="button">손바닥 반전</button>
-          <button id="reset" type="button">크기 리셋</button>
-          <button id="stop" type="button">종료</button>
+          <button id="hand" type="button">Right hand</button>
+          <button id="palm" type="button">Flip palm</button>
+          <button id="reset" type="button">Reset scale</button>
+          <button id="stop" type="button">Quit</button>
         </div>
       </section>
       <section>
-        <h2>상태</h2>
-        <div id="verdict" class="verdict bad">카메라 꺼짐</div>
+        <h2>Status</h2>
+        <div id="verdict" class="verdict bad">Camera off</div>
         <ul id="checks"></ul>
-        <p id="detail"></p>
-      </section>
-      <section>
-        <h2>이 제스처</h2>
-        <p id="help"></p>
       </section>
     </aside>
   </main>
