@@ -35,12 +35,38 @@
       </section>
       <section>
         <h2>Settings</h2>
+        <div class="choice">
+          <div>
+            <button id="clutch-hold" class="active" type="button">Clutching</button>
+            <p id="rec-clutch" class="recommend" hidden>👍 Recommended</p>
+          </div>
+          <div>
+            <button id="clutch-free" type="button">Clutching-Free</button>
+            <p id="rec-free" class="recommend" hidden>👍 Recommended</p>
+          </div>
+        </div>
         <div class="settings">
-          <button id="clutch" type="button">Clutching</button>
           <button id="hand" type="button">Right hand</button>
-          <button id="palm" type="button">Flip palm</button>
           <button id="reset" type="button">Reset</button>
           <button id="stop" type="button">Quit</button>
+        </div>
+      </section>
+      <section>
+        <h2>Advanced Settings</h2>
+        <div class="choice">
+          <button id="pan-drag" class="active" type="button">Drag</button>
+          <button id="pan-follow" type="button">Follow</button>
+        </div>
+        <p class="hint">Drag pulls the picture with the hand, so moving up sends the view down. Follow moves the view with the hand.</p>
+        <div class="sliders">
+          <label>
+            <span>Zoom sensitivity <b id="zoom-value">1.0</b></span>
+            <input id="zoom-sensitivity" type="range" min="0.25" max="3" step="0.05" value="1">
+          </label>
+          <label>
+            <span>Drag sensitivity <b id="drag-value">1.0</b></span>
+            <input id="drag-sensitivity" type="range" min="0.25" max="3" step="0.05" value="1">
+          </label>
         </div>
       </section>
       <section>

@@ -127,7 +127,7 @@ def _draw_gaze(canvas: np.ndarray, ctx) -> None:
 
 
 def _draw_text(canvas: np.ndarray, ctx, lines: list[str], fps: float, gaze_gain: float) -> np.ndarray:
-    help_line = "1-6 모드   F clutching   H 우세손   C 시선보정   P 손바닥반전   R 리셋   [ ] 시선감도   Q 종료"
+    help_line = "1-6 모드   F clutching   H 우세손   C 시선보정   R 리셋   [ ] 시선감도   Q 종료"
     all_lines = [f"{fps:4.1f} FPS    시선감도 {gaze_gain:.1f}", *lines, help_line]
 
     rgb = cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB)

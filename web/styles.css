@@ -1,10 +1,12 @@
 :root {
-  --paper: #f3efe6;
-  --ink: #161616;
-  --muted: #5e584f;
+  --paper: #f6f1e6;
+  --ink: #2a241c;
+  --muted: #6d6256;
   --accent: #2a52be;
-  --serif: "Palatino Linotype", Palatino, Georgia, serif;
-  --sans: "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+  --line: #2a241c;
+  --serif: "Bradley Hand", "Segoe Print", "Marker Felt", Palatino, Georgia, serif;
+  --sans: "Bradley Hand", "Segoe Print", "Marker Felt", "Apple SD Gothic Neo", cursive;
+  --wobble: 18px 14px 22px 12px / 14px 20px 12px 18px;
 }
 
 * { box-sizing: border-box; }
@@ -12,9 +14,13 @@
 body {
   margin: 0;
   min-height: 100vh;
-  background: var(--paper);
   color: var(--ink);
   font-family: var(--sans);
+  background-color: var(--paper);
+  background-image:
+    radial-gradient(circle at 12% 8%, rgba(42, 82, 190, 0.05), transparent 28%),
+    radial-gradient(circle at 90% 0%, rgba(200, 90, 50, 0.06), transparent 24%),
+    repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(42, 36, 28, 0.025) 4px);
 }
 
 header {
@@ -23,7 +29,8 @@ header {
   justify-content: space-between;
   gap: 32px;
   padding: 28px 36px 18px;
-  border-bottom: 1px solid var(--ink);
+  border-bottom: 3px solid var(--line);
+  border-radius: 0 0 40% 60% / 0 0 8px 12px;
 }
 
 #goal {
@@ -41,10 +48,12 @@ header {
 }
 
 .mark {
-  width: 14px;
-  height: 14px;
-  margin-top: 8px;
+  width: 16px;
+  height: 16px;
+  margin-top: 10px;
   background: var(--accent);
+  border-radius: 40% 60% 70% 30%;
+  transform: rotate(-8deg);
 }
 
 h1, h2, p { margin: 0; }
@@ -67,8 +76,10 @@ main {
 .stage {
   position: relative;
   margin: 28px;
-  background: #111;
-  border: 1px solid var(--ink);
+  background: #1c1915;
+  border: 3px solid var(--line);
+  border-radius: var(--wobble);
+  box-shadow: 5px 6px 0 rgba(42, 36, 28, 0.12);
   aspect-ratio: 16 / 9;
   height: fit-content;
 }
@@ -95,19 +106,20 @@ canvas {
   position: absolute;
   left: 50%;
   top: 50%;
-  transform: translate(-50%, -50%);
+  transform: translate(-50%, -50%) rotate(-1.5deg);
   z-index: 2;
-  border: 0;
+  border: 3px solid var(--line);
+  border-radius: 40% 60% 50% 50% / 50% 40% 60% 50%;
   background: var(--accent);
-  color: #f3efe6;
+  color: #f6f1e6;
   padding: 14px 22px;
-  font: 600 14px var(--sans);
-  letter-spacing: 0.08em;
+  font: 600 20px var(--sans);
   cursor: pointer;
+  box-shadow: 3px 3px 0 rgba(42, 36, 28, 0.2);
 }
 
 aside {
-  border-left: 1px solid var(--ink);
+  border-left: 3px solid var(--line);
   padding: 8px 0 28px;
 }
 
@@ -116,28 +128,60 @@ section {
 }
 
 h2 {
-  font-size: 11px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
+  font-family: var(--serif);
+  font-size: 20px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: none;
   color: var(--muted);
   margin-bottom: 12px;
+  transform: rotate(-0.4deg);
 }
 
-.aim, .modes, .settings {
+.aim, .modes, .settings, .choice {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
 
+.choice {
+  align-items: start;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.choice > div {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+}
+
+.recommend {
+  color: var(--accent);
+  font-size: 15px;
+}
+
+.hint {
+  max-width: 280px;
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.35;
+}
+
 button {
-  border: 1px solid var(--ink);
+  border: 2px solid var(--line);
   background: transparent;
   color: var(--ink);
-  border-radius: 0;
+  border-radius: 46% 54% 42% 58% / 42% 48% 52% 58%;
   padding: 8px 12px;
-  font: 600 13px var(--sans);
+  font: 600 16px var(--sans);
   cursor: pointer;
+  box-shadow: 2px 2px 0 rgba(42, 36, 28, 0.08);
 }
+
+.settings button:nth-child(even) { transform: rotate(-0.7deg); }
+.settings button:nth-child(odd) { transform: rotate(0.6deg); }
 
 button.active {
   background: var(--accent);
@@ -148,9 +192,38 @@ button.active {
 button:hover { background: #e7e1d6; }
 button.active:hover { background: var(--accent); }
 
+.sliders {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.sliders label {
+  display: grid;
+  gap: 6px;
+  font-size: 17px;
+}
+
+.sliders span {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.sliders b {
+  font-weight: 500;
+  color: var(--accent);
+}
+
+.sliders input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
 #stop {
   background: var(--accent);
-  color: #f3efe6;
+  color: #f6f1e6;
   border-color: var(--accent);
 }
 
@@ -159,10 +232,11 @@ button.active:hover { background: var(--accent); }
 
 .verdict {
   font-family: var(--serif);
-  font-size: 28px;
+  font-size: 32px;
   line-height: 1.15;
   padding: 4px 0 10px;
-  border-bottom: 1px solid var(--ink);
+  border-bottom: 3px solid var(--line);
+  border-radius: 0 0 30% 70% / 0 0 8px 10px;
 }
 
 .verdict.ok { color: var(--ink); }
@@ -189,6 +263,6 @@ button.active:hover { background: var(--accent); }
 
 @media (max-width: 980px) {
   header, main { display: block; }
-  aside { border-left: 0; border-top: 1px solid var(--ink); }
+  aside { border-left: 0; border-top: 3px solid var(--line); }
   .stage { margin: 16px; }
 }

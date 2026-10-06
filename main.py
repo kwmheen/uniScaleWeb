@@ -152,8 +152,6 @@ def main() -> None:
                 controller.toggle_dominant()
             elif key in (ord("c"), ord("C")):
                 tracker.request_calibration()
-            elif key in (ord("p"), ord("P")):
-                controller.uni_semi.toggle_palm_sign()
             elif key in (ord("r"), ord("R")):
                 for obj in objects:
                     obj.reset_pose()

@@ -454,6 +454,7 @@ class DhGazePinch {
   constructor() {
     this.dominantRight = true;
     this.sensitivity = 1.5;
+    this.panSign = 1;
     this.method = "uniDepth";
     this.selected = null;
     this.wasPinching = false;
@@ -504,8 +505,9 @@ class DhGazePinch {
     const dy = (hand.pixel[WRIST][1] - this.handAnchor[1]) * this.sensitivity;
     if (spatial(this.selected)) {
       const zoom = this.selected.mapZoom;
-      this.selected.mapX = this.objectAnchor[0] + dx / ctx.width / zoom;
-      this.selected.mapY = this.objectAnchor[1] + dy / ctx.height / zoom;
+      const sign = this.panSign;
+      this.selected.mapX = this.objectAnchor[0] + sign * dx / ctx.width / zoom;
+      this.selected.mapY = this.objectAnchor[1] + sign * dy / ctx.height / zoom;
       this.selected.clampMap();
       return;
     }
@@ -915,9 +917,6 @@ class UniSemi {
   setDominantRight(value) {
     this.dominantRight = value;
   }
-  togglePalm() {
-    this.palmSign *= -1;
-  }
   reset() {
     this.deselect();
     this.locked = false;
@@ -981,6 +980,9 @@ export class InteractionController {
     this.method = "uniDepth";
     this.free = false;
     this.dominantRight = true;
+    this.zoomGain = 1;
+    this.dragGain = 1;
+    this.panFollow = false;
     this.biDistance = new BiDistance();
     this.biSemi = new BiSemi();
     this.uniAngle = new UniAngle();
@@ -1015,6 +1017,23 @@ export class InteractionController {
     this.dominantRight = !this.dominantRight;
     this.applySettings();
   }
+  setZoomGain(value) {
+    this.zoomGain = value;
+    this.applySettings();
+  }
+  setDragGain(value) {
+    this.dragGain = value;
+    this.applySettings();
+  }
+  setFree(enabled) {
+    if (this.free === enabled) return;
+    this.free = enabled;
+    this.applySettings();
+  }
+  setPanFollow(enabled) {
+    this.panFollow = enabled;
+    this.applySettings();
+  }
   resetAll() {
     Object.values(this.scales).forEach((interaction) => interaction.reset());
     this.move.reset();
@@ -1028,7 +1047,15 @@ export class InteractionController {
     Object.values(this.scales).forEach((interaction) => {
       interaction.setFree(this.free);
       interaction.setDominantRight?.(this.dominantRight);
+      if (interaction.baseZoom == null) {
+        interaction.baseZoom = interaction.zoomSensitivity ?? interaction.scaleSensitivity ?? 1;
+      }
+      if (interaction.zoomSensitivity != null) interaction.zoomSensitivity = interaction.baseZoom * this.zoomGain;
+      else if (interaction.scaleSensitivity != null) interaction.scaleSensitivity = interaction.baseZoom * this.zoomGain;
     });
+    if (this.move.baseDrag == null) this.move.baseDrag = this.move.sensitivity;
+    this.move.sensitivity = this.move.baseDrag * this.dragGain;
+    this.move.panSign = this.panFollow ? -1 : 1;
     this.move.setDominantRight(this.dominantRight);
     this.move.method = this.method;
   }

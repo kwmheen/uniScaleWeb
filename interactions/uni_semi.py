@@ -51,9 +51,6 @@ class UniSemi:
     def set_dominant_right(self, dominant_right: bool) -> None:
         self.dominant_right = dominant_right
 
-    def toggle_palm_sign(self) -> None:
-        self.palm_sign *= -1.0
-
     def reset(self) -> None:
         self._deselect()
         self.locked = False

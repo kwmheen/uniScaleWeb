@@ -26,6 +26,7 @@ const CONNECTIONS = [
   [0, 17],
 ];
 const THEME = "#2a52be";
+const HAND = "Bradley Hand, Segoe Print, Marker Felt, Palatino, Georgia, serif";
 const DISTRICTS = [
   { x: 0.22, y: 0.32, name: "Harbor" },
   { x: 0.48, y: 0.42, name: "Square" },
@@ -187,7 +188,7 @@ function inFrame(px, py, x, y, w, h) {
 }
 
 function drawMarks(card, places, x, y, w, h, radius, fontSize) {
-  ctx2d.font = `${fontSize}px Palatino, Georgia, serif`;
+  ctx2d.font = `${fontSize}px ${HAND}`;
   ctx2d.textBaseline = "middle";
   for (const place of places) {
     const [px, py] = project(card, place.x, place.y, x, y, w, h);
@@ -318,7 +319,7 @@ function drawCad(card, x, y, w, h) {
 
 function drawZoomLabel(card, x, y, layer) {
   ctx2d.fillStyle = "#161616";
-  ctx2d.font = "24px Palatino Linotype, Palatino, Georgia, serif";
+  ctx2d.font = `24px ${HAND}`;
   ctx2d.textBaseline = "alphabetic";
   ctx2d.fillText(`${card.mapZoom.toFixed(1)}×  ${layer}`, x + 14, y + 32);
 }
@@ -335,7 +336,7 @@ function drawScene(width, height, left, right, gaze) {
     ctx2d.fillStyle = "#171a22";
     ctx2d.fillRect(0, 0, width, height);
     ctx2d.fillStyle = "#f4f1ea";
-    ctx2d.font = "bold 28px Palatino Linotype, Palatino, Georgia, serif";
+    ctx2d.font = `28px ${HAND}`;
     ctx2d.fillText("Camera off", 48, height / 2);
   }
   const scaleSelected = controller.active.selected;
@@ -351,7 +352,7 @@ function drawScene(width, height, left, right, gaze) {
       ctx2d.fillStyle = "rgba(243, 239, 230, 0.82)";
       ctx2d.fillRect(x, y, w, h);
       ctx2d.fillStyle = "#161616";
-      ctx2d.font = "24px Palatino Linotype, Palatino, Apple SD Gothic Neo, serif";
+      ctx2d.font = `24px ${HAND}`;
       ctx2d.fillText(`${card.name}  ${card.scale.toFixed(2)}`, x + 14, y + 34);
     }
     ctx2d.lineWidth = active ? 3 : 1.5;
@@ -432,7 +433,13 @@ function publishStatus(report) {
   }
   verdictBox.textContent = headline;
   verdictBox.className = `verdict ${tone}`;
-  document.querySelector("#clutch").textContent = controller.free ? "ClutchingFree" : "Clutching";
+  const freeRecommended = ["uniDepth", "uniAngle", "uniMicro"].includes(controller.method);
+  document.querySelector("#clutch-hold").classList.toggle("active", !controller.free);
+  document.querySelector("#clutch-free").classList.toggle("active", controller.free);
+  document.querySelector("#rec-clutch").hidden = freeRecommended;
+  document.querySelector("#rec-free").hidden = !freeRecommended;
+  document.querySelector("#pan-drag").classList.toggle("active", !controller.panFollow);
+  document.querySelector("#pan-follow").classList.toggle("active", controller.panFollow);
   document.querySelector("#hand").textContent = controller.dominantRight ? "Right hand" : "Left hand";
   for (const button of modeBox.querySelectorAll("button")) {
     button.classList.toggle("active", button.dataset.method === controller.method);
@@ -644,9 +651,31 @@ function bindControls() {
     });
     modeBox.append(button);
   }
-  document.querySelector("#clutch").addEventListener("click", () => {
-    controller.toggleFree();
+  document.querySelector("#clutch-hold").addEventListener("click", () => {
+    controller.setFree(false);
     publishStatus();
+  });
+  document.querySelector("#clutch-free").addEventListener("click", () => {
+    controller.setFree(true);
+    publishStatus();
+  });
+  document.querySelector("#pan-drag").addEventListener("click", () => {
+    controller.setPanFollow(false);
+    publishStatus();
+  });
+  document.querySelector("#pan-follow").addEventListener("click", () => {
+    controller.setPanFollow(true);
+    publishStatus();
+  });
+  document.querySelector("#zoom-sensitivity").addEventListener("input", (event) => {
+    const value = Number(event.target.value);
+    controller.setZoomGain(value);
+    document.querySelector("#zoom-value").textContent = value.toFixed(1);
+  });
+  document.querySelector("#drag-sensitivity").addEventListener("input", (event) => {
+    const value = Number(event.target.value);
+    controller.setDragGain(value);
+    document.querySelector("#drag-value").textContent = value.toFixed(1);
   });
   document.querySelector("#hand").addEventListener("click", () => {
     controller.toggleDominant();
@@ -655,7 +684,6 @@ function bindControls() {
   document.querySelector("#app-base").addEventListener("click", () => setApp("base"));
   document.querySelector("#app-map").addEventListener("click", () => setApp("map"));
   document.querySelector("#app-cad").addEventListener("click", () => setApp("cad"));
-  document.querySelector("#palm").addEventListener("click", () => controller.uniSemi.togglePalm());
   document.querySelector("#reset").addEventListener("click", () => {
     cards.forEach((card) => card.reset());
     controller.resetAll();
@@ -667,13 +695,14 @@ function bindControls() {
     if (method) controller.setMethod(method[0]);
     else if (event.key === "f" || event.key === "F") controller.toggleFree();
     else if (event.key === "h" || event.key === "H") controller.toggleDominant();
-    else if (event.key === "p" || event.key === "P") controller.uniSemi.togglePalm();
     else if (event.key === "r" || event.key === "R") {
       cards.forEach((card) => card.reset());
       controller.resetAll();
     } else if (event.key === "q" || event.key === "Q") {
       setApp(APPS[(APPS.indexOf(appMode) + 1) % APPS.length]);
-    }
+      return;
+    } else return;
+    publishStatus();
   });
 }
 
