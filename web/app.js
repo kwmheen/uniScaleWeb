@@ -72,6 +72,7 @@ const HOLES = [
   { x: 0.5, y: 0.74, name: "10 mm" },
 ];
 const GOALS = {
+  base: "Fit the object to the dashed frame.",
   map: "Near the Harbor there is a Lighthouse. Find the red buoy.",
   cad: "On the North wing there is a Bracket. Find the 6 mm hole.",
 };
@@ -104,6 +105,11 @@ let cameraOn = false;
 let lastReport = null;
 let shuttingDown = false;
 let aliveTimer = 0;
+let baseGoal = null;
+let goalCelebrating = false;
+let goalHoldUntil = 0;
+const goalBuffer = document.createElement("canvas");
+const goalBufferCtx = goalBuffer.getContext("2d");
 
 const latch = (active, distance, on, off) => (active ? distance <= off : distance <= on);
 
@@ -317,6 +323,154 @@ function drawCad(card, x, y, w, h) {
   drawZoomLabel(card, x, y, zoom >= 7 ? "Callouts" : zoom >= 3 ? "Parts" : "Plan");
 }
 
+function randomGoalScale() {
+  const lowMax = 0.974;
+  const highMin = 1.205;
+  const lowSpan = lowMax - 0.55;
+  const highSpan = 1.8 - highMin;
+  const pick = Math.random() * (lowSpan + highSpan);
+  if (pick < lowSpan) return 0.55 + pick;
+  return highMin + (pick - lowSpan);
+}
+
+function randomBaseGoal() {
+  return {
+    nx: 0.18 + Math.random() * 0.64,
+    ny: 0.18 + Math.random() * 0.64,
+    scale: randomGoalScale(),
+  };
+}
+
+function goalSeparated(goal, other) {
+  if (!other) return true;
+  return Math.hypot(goal.nx - other.nx, goal.ny - other.ny) > 0.14 || Math.abs(goal.scale - other.scale) > 0.28;
+}
+
+function nextBaseGoal() {
+  const card = cards[0];
+  const here = { nx: card.nx, ny: card.ny, scale: card.scale };
+  let goal = randomBaseGoal();
+  for (let attempt = 0; attempt < 12 && (!goalSeparated(goal, here) || !goalSeparated(goal, baseGoal)); attempt += 1) {
+    goal = randomBaseGoal();
+  }
+  baseGoal = goal;
+}
+
+function baseGoalReached() {
+  const card = cards[0];
+  if (!baseGoal) return false;
+  const placed = Math.hypot(card.nx - baseGoal.nx, card.ny - baseGoal.ny) < 0.05;
+  const sized = Math.abs(card.scale - baseGoal.scale) / baseGoal.scale < 0.12;
+  return placed && sized;
+}
+
+function goalBox(width, height) {
+  const card = cards[0];
+  const boxW = card.nw * width * baseGoal.scale;
+  const boxH = card.nh * height * baseGoal.scale;
+  return [baseGoal.nx * width - boxW / 2, baseGoal.ny * height - boxH / 2, boxW, boxH];
+}
+
+function baseGoalText() {
+  return goalCelebrating || !baseGoal ? "Matched" : `Fit the object to ${baseGoal.scale.toFixed(2)}.`;
+}
+
+function showBaseGoalText() {
+  const goal = document.querySelector("#goal");
+  goal.hidden = false;
+  goal.textContent = baseGoalText();
+}
+
+function updateBaseGoal(now) {
+  if (goalCelebrating) {
+    if (now < goalHoldUntil) return;
+    goalCelebrating = false;
+    nextBaseGoal();
+    showBaseGoalText();
+    return;
+  }
+  if (!baseGoalReached()) return;
+  goalCelebrating = true;
+  goalHoldUntil = now + 1;
+  showBaseGoalText();
+}
+
+function clearBaseCelebration() {
+  goalCelebrating = false;
+  goalHoldUntil = 0;
+}
+
+function frostGoal(x, y, boxW, boxH) {
+  const bw = Math.max(1, Math.ceil(boxW));
+  const bh = Math.max(1, Math.ceil(boxH));
+  if (goalBuffer.width !== bw || goalBuffer.height !== bh) {
+    goalBuffer.width = bw;
+    goalBuffer.height = bh;
+  } else {
+    goalBufferCtx.clearRect(0, 0, bw, bh);
+  }
+  const bleed = 18;
+  goalBufferCtx.save();
+  goalBufferCtx.filter = "blur(8px)";
+  goalBufferCtx.drawImage(
+    canvas,
+    x - bleed,
+    y - bleed,
+    boxW + bleed * 2,
+    boxH + bleed * 2,
+    -bleed,
+    -bleed,
+    boxW + bleed * 2,
+    boxH + bleed * 2,
+  );
+  goalBufferCtx.restore();
+  ctx2d.save();
+  ctx2d.beginPath();
+  ctx2d.rect(x, y, boxW, boxH);
+  ctx2d.clip();
+  ctx2d.drawImage(goalBuffer, x, y, boxW, boxH);
+  ctx2d.fillStyle = "rgba(214, 214, 214, 0.16)";
+  ctx2d.fillRect(x, y, boxW, boxH);
+  ctx2d.restore();
+}
+
+function strokeBaseGoal(x, y, boxW, boxH) {
+  const card = cards[0];
+  const [ox, oy, ow, oh] = card.rect(canvas.width, canvas.height);
+  const ocx = ox + ow / 2;
+  const ocy = oy + oh / 2;
+  const spots = [
+    { x: x + 16, y: y + 34, align: "left" },
+    { x: x + boxW - 16, y: y + 34, align: "right" },
+    { x: x + 16, y: y + boxH - 16, align: "left" },
+    { x: x + boxW - 16, y: y + boxH - 16, align: "right" },
+  ];
+  const spot = spots.reduce((best, next) => (
+    Math.hypot(next.x - ocx, next.y - ocy) > Math.hypot(best.x - ocx, best.y - ocy) ? next : best
+  ));
+  ctx2d.save();
+  ctx2d.strokeStyle = "rgba(186, 186, 186, 0.75)";
+  ctx2d.lineWidth = 3;
+  ctx2d.setLineDash([12, 9]);
+  ctx2d.strokeRect(x, y, boxW, boxH);
+  ctx2d.fillStyle = "rgba(236, 236, 236, 0.92)";
+  ctx2d.font = `28px ${HAND}`;
+  ctx2d.textAlign = spot.align;
+  ctx2d.textBaseline = "alphabetic";
+  ctx2d.fillText(baseGoal.scale.toFixed(2), spot.x, spot.y);
+  ctx2d.restore();
+}
+
+function drawMatchedLabel(x, y, w, h) {
+  ctx2d.save();
+  ctx2d.fillStyle = THEME;
+  ctx2d.font = `32px ${HAND}`;
+  ctx2d.textAlign = "center";
+  ctx2d.textBaseline = "middle";
+  ctx2d.fillText("Matched", x + w / 2, y + h / 2);
+  ctx2d.restore();
+}
+
 function drawZoomLabel(card, x, y, layer) {
   ctx2d.fillStyle = "#161616";
   ctx2d.font = `24px ${HAND}`;
@@ -349,6 +503,7 @@ function drawScene(width, height, left, right, gaze) {
     } else if (appMode === "cad") {
       drawCad(card, x, y, w, h);
     } else {
+      if (!goalCelebrating) frostGoal(...goalBox(width, height));
       ctx2d.fillStyle = "rgba(243, 239, 230, 0.82)";
       ctx2d.fillRect(x, y, w, h);
       ctx2d.fillStyle = "#161616";
@@ -358,6 +513,8 @@ function drawScene(width, height, left, right, gaze) {
     ctx2d.lineWidth = active ? 3 : 1.5;
     ctx2d.strokeStyle = active ? THEME : "#161616";
     ctx2d.strokeRect(x, y, w, h);
+    if (appMode === "base" && baseGoal && !goalCelebrating) strokeBaseGoal(...goalBox(width, height));
+    if (appMode === "base" && goalCelebrating) drawMatchedLabel(x, y, w, h);
   }
 
   for (const hand of [left, right]) {
@@ -415,6 +572,9 @@ function publishStatus(report) {
     headline = "Camera off";
   } else if (loopError) {
     headline = "Tracking error";
+  } else if (appMode === "base" && goalCelebrating) {
+    headline = "Matched";
+    tone = "ok";
   } else if (scaling) {
     headline = appMode === "base" ? "Scaling" : "Zooming";
     tone = "ok";
@@ -569,6 +729,7 @@ function loop() {
   const gaze = { tracked: true, x: cards[0].nx * width, y: cards[0].ny * height, hit: true, origin: null, dir: null };
   const frame = makeContext(now, dt, width, height, left, right, gaze, cards, "hand");
   controller.update(frame);
+  if (appMode === "base") updateBaseGoal(now);
   drawScene(width, height, left, right, gaze);
   publishStatus({
     camera: true,
@@ -629,11 +790,16 @@ async function startCamera() {
 }
 
 function setApp(mode) {
+  clearBaseCelebration();
   appMode = mode;
   for (const card of cards) card.useMode(mode);
   const goal = document.querySelector("#goal");
   goal.hidden = !GOALS[mode];
   if (GOALS[mode]) goal.textContent = GOALS[mode];
+  if (mode === "base") {
+    nextBaseGoal();
+    showBaseGoalText();
+  }
   controller.resetAll();
   publishStatus();
   if (!running) drawScene(canvas.width, canvas.height, null, null, { tracked: false, x: 0, y: 0 });
@@ -687,6 +853,12 @@ function bindControls() {
   document.querySelector("#reset").addEventListener("click", () => {
     cards.forEach((card) => card.reset());
     controller.resetAll();
+    clearBaseCelebration();
+    if (appMode === "base") {
+      nextBaseGoal();
+      showBaseGoalText();
+    }
+    if (!running) drawScene(canvas.width, canvas.height, null, null, { tracked: false, x: 0, y: 0 });
   });
   startButton.addEventListener("click", startCamera);
   document.querySelector("#stop").addEventListener("click", shutdownApp);
@@ -698,6 +870,12 @@ function bindControls() {
     else if (event.key === "r" || event.key === "R") {
       cards.forEach((card) => card.reset());
       controller.resetAll();
+      clearBaseCelebration();
+      if (appMode === "base") {
+        nextBaseGoal();
+        showBaseGoalText();
+      }
+      if (!running) drawScene(canvas.width, canvas.height, null, null, { tracked: false, x: 0, y: 0 });
     } else if (event.key === "q" || event.key === "Q") {
       setApp(APPS[(APPS.indexOf(appMode) + 1) % APPS.length]);
       return;
@@ -707,6 +885,8 @@ function bindControls() {
 }
 
 bindControls();
+nextBaseGoal();
+showBaseGoalText();
 publishStatus({ camera: false });
 if (location.protocol !== "file:") startHeartbeat();
 drawScene(canvas.width, canvas.height, null, null, { tracked: false, x: 0, y: 0 });

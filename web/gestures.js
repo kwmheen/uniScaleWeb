@@ -462,6 +462,7 @@ class DhGazePinch {
     this.objectAnchor = [0.5, 0.5];
     this.panning = false;
     this.yielded = false;
+    this.filtered = null;
   }
   setDominantRight(value) {
     this.dominantRight = value;
@@ -470,6 +471,11 @@ class DhGazePinch {
     this.selected = null;
     this.wasPinching = false;
     this.yielded = false;
+    this.filtered = null;
+  }
+  follow(current, target, dt) {
+    const alpha = 1 - Math.exp(-Math.max(dt, 0.0001) / 0.08);
+    return current + (target - current) * alpha;
   }
   pinching(ctx) {
     const hand = ctx.dominant(this.dominantRight);
@@ -493,9 +499,11 @@ class DhGazePinch {
         this.handAnchor = [...hand.pixel[WRIST]];
         this.panning = spatial(gazed);
         this.objectAnchor = this.panning ? [gazed.mapX, gazed.mapY] : [gazed.nx, gazed.ny];
+        this.filtered = this.panning ? null : { x: gazed.nx, y: gazed.ny };
       }
     } else if (!pinching && this.wasPinching) {
       this.selected = null;
+      this.filtered = null;
     }
     this.wasPinching = pinching;
     if (!this.selected) return;
@@ -511,8 +519,13 @@ class DhGazePinch {
       this.selected.clampMap();
       return;
     }
-    this.selected.nx = Math.min(0.92, Math.max(0.08, this.objectAnchor[0] + dx / ctx.width));
-    this.selected.ny = Math.min(0.9, Math.max(0.1, this.objectAnchor[1] + dy / ctx.height));
+    const targetX = Math.min(0.92, Math.max(0.08, this.objectAnchor[0] + dx / ctx.width));
+    const targetY = Math.min(0.9, Math.max(0.1, this.objectAnchor[1] + dy / ctx.height));
+    if (!this.filtered) this.filtered = { x: targetX, y: targetY };
+    this.filtered.x = this.follow(this.filtered.x, targetX, ctx.dt);
+    this.filtered.y = this.follow(this.filtered.y, targetY, ctx.dt);
+    this.selected.nx = this.filtered.x;
+    this.selected.ny = this.filtered.y;
   }
   status() {
     const state = this.yielded ? "일시정지" : this.selected ? "이동" : "대기";
